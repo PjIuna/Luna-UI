@@ -819,13 +819,15 @@ function LunaUI:CreateWindow(options)
 
             local description = controlOptions.Description or controlOptions.Subtext
             local hasDescription = type(description) == "string" and description ~= ""
-            local rowHeight = hasDescription and 44 or 34
+            local rowHeight = hasDescription and 40 or 30
 
-            -- Compact text-only button: no placeholder icon or gray square.
+            -- Text-only button: fully transparent background, no icon tile,
+            -- rounded card, border, or gray square.
             local row = make("TextButton", {
                 Name = "ButtonRow",
                 Parent = self._items,
                 Size = UDim2.new(1, -4, 0, rowHeight),
+                BackgroundTransparency = 1,
                 BackgroundColor3 = COLORS.panel,
                 BorderSizePixel = 0,
                 AutoButtonColor = false,
@@ -833,24 +835,24 @@ function LunaUI:CreateWindow(options)
                 TextTransparency = 1,
             })
             row:SetAttribute("IsLunaRow", true)
-            round(row, 7)
-            outline(row, 0.9)
 
-            label(row, controlOptions.Name or "Button", {
+            local titleLabel = label(row, controlOptions.Name or "Button", {
                 AnchorPoint = Vector2.new(0, 0.5),
-                Position = UDim2.new(0, 10, 0, hasDescription and 13 or rowHeight / 2),
+                Position = UDim2.new(0, 10, 0, hasDescription and 11 or rowHeight / 2),
                 Size = UDim2.new(1, -20, 0, 18),
                 FontFace = FONT_BOLD,
                 TextXAlignment = Enum.TextXAlignment.Left,
                 TextYAlignment = Enum.TextYAlignment.Center,
                 TextScaled = false,
                 TextSize = 13,
+                TextColor3 = COLORS.white,
             })
 
+            local descriptionLabel
             if hasDescription then
-                label(row, description, {
+                descriptionLabel = label(row, description, {
                     AnchorPoint = Vector2.new(0, 0.5),
-                    Position = UDim2.new(0, 10, 0, 31),
+                    Position = UDim2.new(0, 10, 0, 29),
                     Size = UDim2.new(1, -20, 0, 13),
                     TextXAlignment = Enum.TextXAlignment.Left,
                     TextYAlignment = Enum.TextYAlignment.Center,
@@ -862,10 +864,13 @@ function LunaUI:CreateWindow(options)
 
             local hoverScale = make("UIScale", {Parent = row})
             row.MouseEnter:Connect(function()
-                animate(row, 0.15, {BackgroundColor3 = COLORS.panelHi})
+                animate(titleLabel, 0.15, {TextColor3 = COLORS.icon})
             end)
             row.MouseLeave:Connect(function()
-                animate(row, 0.2, {BackgroundColor3 = COLORS.panel})
+                animate(titleLabel, 0.2, {TextColor3 = COLORS.white})
+                if descriptionLabel then
+                    animate(descriptionLabel, 0.2, {TextColor3 = COLORS.icon})
+                end
                 animate(hoverScale, 0.2, {Scale = 1})
             end)
             row.MouseButton1Down:Connect(function()
