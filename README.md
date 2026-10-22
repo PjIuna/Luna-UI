@@ -111,6 +111,33 @@ Window:Notify({
 
 Window options: `Title`, `Width`, `Height`, `AspectRatio`, `ToggleKey`, `OpenAnimationDuration`, `CloseAnimationDuration`, `OpenAnimationScale`, `OpenAnimationOffset`, `CloseAnimationOffset`, `AsciiBackdrop`, `AsciiTextSize`, `AsciiPadding`, `AsciiFPS`, `AsciiRamp`, `AsciiColor`, and `AsciiMouseRipple`. The animated symbol backdrop is enabled by default. Set `AsciiBackdrop = false` to disable it; tweak the text size, border padding, frame rate, glyph ramp, color, or mouse ripple with the other `Ascii*` options. By default the window uses the same scale-based sizing and a 1.2415 aspect ratio as the reference. Press **RightShift** to hide or show it.
 
+## Tab icon presets
+
+Use a built-in icon name as the second argument when creating a tab:
+
+```lua
+local Home = Window:CreateTab("Home", {Icon = "Home"})
+local Shop = Window:CreateTab("Shop", {Icon = "Money"})
+local Logs = Window:CreateTab("Logs", {Icon = "Logger"})
+local Support = Window:CreateTab("Support", {Icon = "Supported"})
+local Passes = Window:CreateTab("Passes", {Icon = "Ticket"})
+local Friends = Window:CreateTab("Friends", {Icon = "Join"})
+local CopyTab = Window:CreateTab("Copy", {Icon = "Copy"})
+```
+
+Available preset names and their matching aliases:
+
+- **Home:** `Home`, `House`
+- **Money icon:** `Money`, `Cash`, `Wallet`, `Coins`, `Faker`
+- **Logger:** `Logger`, `Logs`, `Clipboard`
+- **Supported:** `Supported`, `Shield`
+- **Passes:** `Passes`, `Ticket`, `Gamepass`
+- **Join:** `Join`, `UserPlus`
+- **Copy:** `Copy`
+- **Close:** `Close`, `X`
+
+The image IDs used by these presets are also exposed as `LunaUI.Icons`, so you can use `{Icon = LunaUI.Icons.Money}`. To use your own Roblox image, pass a numeric asset ID or a full image URL, for example `{Icon = "1234567890"}` or `{Icon = "rbxassetid://1234567890"}`.
+
 ## Tab controls
 
 - `Tab:CreateSection(name)`
