@@ -136,7 +136,7 @@ Available preset names and their matching aliases:
 - **Copy:** `Copy`
 - **Close:** `Close`, `X`
 
-The image IDs used by these presets are also exposed as `LunaUI.Icons`, so you can use `{Icon = LunaUI.Icons.Money}`. To use your own Roblox image, pass a numeric asset ID or a full image URL, for example `{Icon = "1234567890"}` or `{Icon = "rbxassetid://1234567890"}`.
+The image IDs used by these presets are also exposed as `LunaUI.Icons`, so you can use `{Icon = LunaUI.Icons.Money}`. To use your own uploaded Roblox image, pass its numeric asset ID or `rbxassetid://` ID, for example `{Icon = "1234567890"}` or `{Icon = "rbxassetid://1234567890"}`.
 
 ## Tab controls
 
