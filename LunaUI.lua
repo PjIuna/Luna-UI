@@ -13,6 +13,7 @@ local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local TextService = game:GetService("TextService")
+local HttpService = game:GetService("HttpService")
 
 local LunaUI = {}
 LunaUI.__index = LunaUI
@@ -223,6 +224,104 @@ function LunaUI:CreateWindow(options)
     options = options or {}
     local player = Players.LocalPlayer
 
+    -- Singleton registry: re-executing a script removes the previous Luna window.
+    local runtimeEnv = _G
+    if type(getgenv) == "function" then
+        local ok, sharedEnv = pcall(getgenv)
+        if ok and type(sharedEnv) == "table" then
+            runtimeEnv = sharedEnv
+        end
+    end
+    local singletonKey = tostring(options.SingletonKey or "__LunaUI_ACTIVE_WINDOW")
+    if options.Singleton ~= false then
+        local previous = runtimeEnv[singletonKey]
+        if type(previous) == "table" and type(previous.Destroy) == "function" then
+            pcall(function() previous:Destroy() end)
+        end
+        runtimeEnv[singletonKey] = nil
+
+        -- Also clean up a named GUI left by an earlier library version.
+        local holders = {}
+        local function addHolder(holder)
+            if holder and typeof(holder) == "Instance" then
+                for _, known in ipairs(holders) do
+                    if known == holder then return end
+                end
+                table.insert(holders, holder)
+            end
+        end
+        if type(gethui) == "function" then
+            local ok, holder = pcall(gethui)
+            if ok then addHolder(holder) end
+        end
+        local coreOk, core = pcall(function() return game:GetService("CoreGui") end)
+        if coreOk then addHolder(core) end
+        if player then
+            local playerGui = player:FindFirstChildOfClass("PlayerGui")
+            addHolder(playerGui)
+        end
+        for _, holder in ipairs(holders) do
+            for _, child in ipairs(holder:GetChildren()) do
+                if child:IsA("ScreenGui") and child.Name == "LunaUI" then
+                    pcall(function() child:Destroy() end)
+                end
+            end
+        end
+    end
+
+    -- Config files let values survive leaving and rejoining the game, when the
+    -- executor supports readfile/writefile. Memory is used as a session fallback.
+    local saveConfigEnabled = options.SaveConfig ~= false
+    local rawConfigName = tostring(options.ConfigName or options.Title or "LunaUI")
+    local configName = string.lower(rawConfigName):gsub("[^%w_-]", "_")
+    if configName == "" then configName = "default" end
+    local configPath = "LunaUI_" .. configName .. ".json"
+    local configMemoryKey = "__LunaUI_CONFIG_" .. configName
+    local configData = {Version = 1, Values = {}}
+    local loadedFromFile = false
+
+    if saveConfigEnabled and type(readfile) == "function" then
+        local readOk, raw = pcall(function()
+            if type(isfile) == "function" and not isfile(configPath) then
+                return nil
+            end
+            return readfile(configPath)
+        end)
+        if readOk and type(raw) == "string" and raw ~= "" then
+            local decodeOk, decoded = pcall(function()
+                return HttpService:JSONDecode(raw)
+            end)
+            if decodeOk and type(decoded) == "table" and type(decoded.Values) == "table" then
+                configData = decoded
+                loadedFromFile = true
+            end
+        end
+    end
+
+    if saveConfigEnabled and not loadedFromFile then
+        local memoryConfig = runtimeEnv[configMemoryKey]
+        if type(memoryConfig) == "table" and type(memoryConfig.Values) == "table" then
+            configData = memoryConfig
+        end
+    end
+    configData.Version = 1
+    configData.Values = type(configData.Values) == "table" and configData.Values or {}
+
+    local savedPosition = configData.Values.__windowPosition
+    local initialPosition = UDim2.fromScale(0.5, 0.5)
+    if type(savedPosition) == "table"
+        and type(savedPosition.XScale) == "number"
+        and type(savedPosition.XOffset) == "number"
+        and type(savedPosition.YScale) == "number"
+        and type(savedPosition.YOffset) == "number" then
+        initialPosition = UDim2.new(
+            savedPosition.XScale,
+            savedPosition.XOffset,
+            savedPosition.YScale,
+            savedPosition.YOffset
+        )
+    end
+
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "LunaUI"
     screenGui.ResetOnSpawn = false
@@ -263,7 +362,7 @@ function LunaUI:CreateWindow(options)
         Name = "Main",
         Parent = screenGui,
         AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.fromScale(0.5, 0.5),
+        Position = initialPosition,
         Size = mainSize,
         BackgroundColor3 = COLORS.bg,
         BackgroundTransparency = 0,
@@ -469,6 +568,14 @@ function LunaUI:CreateWindow(options)
     local window = setmetatable({
         _gui = screenGui,
         _main = main,
+        _runtimeEnv = runtimeEnv,
+        _registryKey = singletonKey,
+        _configEnabled = saveConfigEnabled,
+        _configData = configData,
+        _configPath = configPath,
+        _configMemoryKey = configMemoryKey,
+        _saveConfigToken = 0,
+        _configWarned = false,
         _mainScale = mainScale,
         _content = content,
         _bottomBar = bottomBar,
@@ -485,7 +592,7 @@ function LunaUI:CreateWindow(options)
         _openDuration = openDuration,
         _closeDuration = closeDuration,
         _openScale = openScale,
-        _restPosition = main.Position,
+        _restPosition = initialPosition,
         _openOffset = math.clamp(tonumber(options.OpenAnimationOffset) or 34, 12, 100),
         _closeOffset = math.clamp(tonumber(options.CloseAnimationOffset) or 24, 8, 80),
         _title = title,
@@ -497,6 +604,87 @@ function LunaUI:CreateWindow(options)
     local function track(connection)
         table.insert(window._connections, connection)
         return connection
+    end
+
+    local function writeConfigNow()
+        if not window._configEnabled or window._destroyed then return end
+        local data = window._configData
+        data.Version = 1
+        data.UpdatedAt = os.time()
+        window._runtimeEnv[window._configMemoryKey] = data
+
+        local encodeOk, encoded = pcall(function()
+            return HttpService:JSONEncode(data)
+        end)
+        if not encodeOk then
+            warn("[Luna UI] Could not encode config:", encoded)
+            return
+        end
+
+        local writeOk, writeErr = pcall(function()
+            if type(writefile) ~= "function" then
+                error("writefile is not available in this executor")
+            end
+            writefile(window._configPath, encoded)
+        end)
+        if not writeOk and not window._configWarned then
+            window._configWarned = true
+            warn("[Luna UI] Config is stored in memory only. Cross-rejoin saving requires executor readfile/writefile support. " .. tostring(writeErr))
+        end
+    end
+
+    local function queueConfigSave(debounce)
+        if not window._configEnabled or window._destroyed then return end
+        window._saveConfigToken += 1
+        local token = window._saveConfigToken
+        if not debounce then
+            writeConfigNow()
+        else
+            task.delay(0.35, function()
+                if not window._destroyed and token == window._saveConfigToken then
+                    writeConfigNow()
+                end
+            end)
+        end
+    end
+
+    function window:_ConfigKey(tabName, controlType, controlOptions)
+        controlOptions = type(controlOptions) == "table" and controlOptions or {}
+        local name = controlOptions.Flag or controlOptions.Name or controlType
+        return tostring(tabName) .. "/" .. tostring(name)
+    end
+
+    function window:_HasSavedValue(key)
+        return self._configEnabled and self._configData.Values[key] ~= nil
+    end
+
+    function window:_GetSavedValue(key, defaultValue)
+        if self._configEnabled then
+            local value = self._configData.Values[key]
+            if value ~= nil and (defaultValue == nil or typeof(value) == typeof(defaultValue)) then
+                return value
+            end
+        end
+        return defaultValue
+    end
+
+    function window:_SetSavedValue(key, value, debounce)
+        if not self._configEnabled then return end
+        local valueType = typeof(value)
+        if valueType ~= "boolean" and valueType ~= "number" and valueType ~= "string" then
+            return
+        end
+        self._configData.Values[key] = value
+        queueConfigSave(debounce == true)
+    end
+
+    function window:SaveConfig()
+        writeConfigNow()
+    end
+
+    -- Register this window so the next execution can destroy it cleanly.
+    if options.Singleton ~= false then
+        runtimeEnv[singletonKey] = window
     end
 
     -- Approximate monospace cell geometry with Roblox's own text metrics.
@@ -643,12 +831,15 @@ function LunaUI:CreateWindow(options)
         end
     end
 
-    local function selectTab(tab, instant)
+    local function selectTab(tab, instant, persistSelection)
         if window._destroyed or window._activeTab == tab then
             return
         end
         local previous = window._activeTab
         window._activeTab = tab
+        if persistSelection then
+            window:_SetSavedValue("__activeTab", tab._name, false)
+        end
 
         for _, entry in ipairs(window._tabs) do
             local selected = entry == tab
@@ -744,9 +935,6 @@ function LunaUI:CreateWindow(options)
             _empty = empty,
         }
         table.insert(self._tabs, tab)
-        track(button.MouseButton1Click:Connect(function()
-            selectTab(tab, false)
-        end))
 
         local function refreshEmpty()
             if not empty.Parent then
@@ -929,7 +1117,9 @@ function LunaUI:CreateWindow(options)
 
         function tab:CreateToggle(controlOptions)
             controlOptions = type(controlOptions) == "table" and controlOptions or {}
-            local enabled = controlOptions.Default == true
+            local configKey = self._window:_ConfigKey(self._name, "Toggle", controlOptions)
+            local hasSavedValue = self._window:_HasSavedValue(configKey)
+            local enabled = self._window:_GetSavedValue(configKey, controlOptions.Default == true) == true
             local row = make("Frame", {
                 Name = "ToggleRow",
                 Parent = self._items,
@@ -978,15 +1168,17 @@ function LunaUI:CreateWindow(options)
             end
             track(switch.Activated:Connect(function()
                 enabled = not enabled
+                self._window:_SetSavedValue(configKey, enabled, false)
                 update(true)
             end))
-            update(false)
+            update(hasSavedValue)
             refreshEmpty()
             return {
                 Instance = row,
                 GetValue = function() return enabled end,
                 SetValue = function(value)
                     enabled = value == true
+                    self._window:_SetSavedValue(configKey, enabled, false)
                     update(true)
                 end,
             }
@@ -994,10 +1186,14 @@ function LunaUI:CreateWindow(options)
 
         function tab:CreateSlider(controlOptions)
             controlOptions = controlOptions or {}
+            local configKey = self._window:_ConfigKey(self._name, "Slider", controlOptions)
+            local hasSavedValue = self._window:_HasSavedValue(configKey)
             local minimum = tonumber(controlOptions.Min) or 0
             local maximum = tonumber(controlOptions.Max) or 100
             if maximum < minimum then maximum = minimum end
-            local value = math.clamp(tonumber(controlOptions.Default) or minimum, minimum, maximum)
+            local defaultValue = tonumber(controlOptions.Default) or minimum
+            local restoredValue = tonumber(self._window:_GetSavedValue(configKey, defaultValue)) or defaultValue
+            local value = math.clamp(restoredValue, minimum, maximum)
             local row = make("Frame", {
                 Name = "SliderRow",
                 Parent = self._items,
@@ -1051,6 +1247,7 @@ function LunaUI:CreateWindow(options)
                 value = math.floor((minimum + (maximum - minimum) * ratio) + 0.5)
                 number.Text = tostring(value)
                 animate(fill, 0.06, {Size = UDim2.new(ratio, 0, 1, 0)})
+                self._window:_SetSavedValue(configKey, value, true)
                 if type(controlOptions.Callback) == "function" then
                     local ok, err = pcall(controlOptions.Callback, value)
                     if not ok then warn("[Luna UI] Slider callback:", err) end
@@ -1072,6 +1269,10 @@ function LunaUI:CreateWindow(options)
                     dragging = false
                 end
             end))
+            if hasSavedValue and type(controlOptions.Callback) == "function" then
+                local ok, err = pcall(controlOptions.Callback, value)
+                if not ok then warn("[Luna UI] Slider restore callback:", err) end
+            end
             refreshEmpty()
             return {
                 Instance = row,
@@ -1081,12 +1282,17 @@ function LunaUI:CreateWindow(options)
                     number.Text = tostring(value)
                     local ratio = maximum == minimum and 1 or (value - minimum) / (maximum - minimum)
                     fill.Size = UDim2.new(ratio, 0, 1, 0)
+                    self._window:_SetSavedValue(configKey, value, false)
                 end,
             }
         end
 
         function tab:CreateInput(controlOptions)
             controlOptions = controlOptions or {}
+            local configKey = self._window:_ConfigKey(self._name, "Input", controlOptions)
+            local hasSavedValue = self._window:_HasSavedValue(configKey)
+            local defaultText = tostring(controlOptions.Default or "")
+            local restoredText = tostring(self._window:_GetSavedValue(configKey, defaultText) or defaultText)
             local row = make("Frame", {
                 Name = "InputRow",
                 Parent = self._items,
@@ -1114,7 +1320,7 @@ function LunaUI:CreateWindow(options)
                 TextColor3 = COLORS.white,
                 PlaceholderColor3 = COLORS.dim,
                 PlaceholderText = controlOptions.Placeholder or controlOptions.Name or "Enter text...",
-                Text = controlOptions.Default or "",
+                Text = restoredText,
                 ClearTextOnFocus = false,
                 TextXAlignment = Enum.TextXAlignment.Left,
             })
@@ -1125,26 +1331,37 @@ function LunaUI:CreateWindow(options)
             box.FocusLost:Connect(function(enterPressed)
                 animate(stroke, 0.2, {Transparency = 0.86})
                 animate(row, 0.2, {BackgroundColor3 = COLORS.panel})
+                self._window:_SetSavedValue(configKey, box.Text, false)
                 if type(controlOptions.Callback) == "function" then
                     local ok, err = pcall(controlOptions.Callback, box.Text, enterPressed)
                     if not ok then warn("[Luna UI] Input callback:", err) end
                 end
             end)
+            if hasSavedValue and type(controlOptions.Callback) == "function" then
+                local ok, err = pcall(controlOptions.Callback, box.Text, false)
+                if not ok then warn("[Luna UI] Input restore callback:", err) end
+            end
             refreshEmpty()
             return {
                 Instance = row,
                 TextBox = box,
                 GetValue = function() return box.Text end,
-                SetValue = function(newValue) box.Text = tostring(newValue or "") end,
+                SetValue = function(newValue)
+                    box.Text = tostring(newValue or "")
+                    self._window:_SetSavedValue(configKey, box.Text, false)
+                end,
             }
         end
 
         track(button.Activated:Connect(function()
-            selectTab(tab, false)
+            selectTab(tab, false, true)
         end))
         refreshEmpty()
-        if #self._tabs == 1 then
-            selectTab(tab, true)
+        local savedTabName = self:_GetSavedValue("__activeTab", nil)
+        if savedTabName == name then
+            selectTab(tab, true, false)
+        elseif #self._tabs == 1 then
+            selectTab(tab, true, false)
         end
         return tab
     end
@@ -1225,6 +1442,14 @@ function LunaUI:CreateWindow(options)
         if self._destroyed then return end
         self._destroyed = true
         self._closing = false
+        if self._configEnabled then
+            pcall(function()
+                self:SaveConfig()
+            end)
+        end
+        if self._runtimeEnv and self._registryKey and self._runtimeEnv[self._registryKey] == self then
+            self._runtimeEnv[self._registryKey] = nil
+        end
         for _, connection in ipairs(self._connections) do
             pcall(function() connection:Disconnect() end)
         end
@@ -1372,6 +1597,12 @@ function LunaUI:CreateWindow(options)
             )
             main.Position = newPosition
             window._restPosition = newPosition
+            window:_SetSavedValue("__windowPosition", {
+                XScale = newPosition.X.Scale,
+                XOffset = newPosition.X.Offset,
+                YScale = newPosition.Y.Scale,
+                YOffset = newPosition.Y.Offset,
+            }, true)
         end
     end))
     track(UserInputService.InputBegan:Connect(function(input, gameProcessed)
