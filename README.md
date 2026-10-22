@@ -1,6 +1,6 @@
 # 🌙 Luna UI
 
-A reusable Roblox UI toolkit modeled on the supplied Product Faker V2 interface: a compact near-black window, Roboto Condensed typography, charcoal rounded controls, a draggable title bar, image-only bottom navigation, a moving underline indicator, animated hover/selection states, an opening pop-in and closing shrink/fade, and the original-style animated ASCII-symbol field around the window. The symbols use a three-layer glow, fade outward from the panel, and ripple around the mouse.
+A reusable Roblox UI toolkit modeled on the supplied Product Faker V2 interface: a compact near-black window, Roboto Condensed typography, charcoal rounded controls, a draggable title bar, image-only bottom navigation, a moving underline indicator, animated hover/selection states, an opening pop-in and closing shrink/fade, an opening slide/pop/fade and closing shrink/slide/fade animation, and the original-style animated ASCII-symbol field around the window. The symbols use a three-layer glow, fade outward from the panel, and ripple around the mouse.
 
 Luna UI provides the interface and callbacks. It does not include the original Product Faker features.
 
@@ -109,7 +109,7 @@ Window:Notify({
 - `Window:Close()` plays the close animation and then removes the GUI.
 - `Window:Destroy()` immediately removes the GUI.
 
-Window options: `Title`, `Width`, `Height`, `AspectRatio`, `ToggleKey`, `OpenAnimationDuration`, `CloseAnimationDuration`, `OpenAnimationScale`, `AsciiBackdrop`, `AsciiTextSize`, `AsciiPadding`, `AsciiFPS`, `AsciiRamp`, `AsciiColor`, and `AsciiMouseRipple`. The animated symbol backdrop is enabled by default. Set `AsciiBackdrop = false` to disable it; tweak the text size, border padding, frame rate, glyph ramp, color, or mouse ripple with the other `Ascii*` options. By default the window uses the same scale-based sizing and a 1.2415 aspect ratio as the reference. Press **RightShift** to hide or show it.
+Window options: `Title`, `Width`, `Height`, `AspectRatio`, `ToggleKey`, `OpenAnimationDuration`, `CloseAnimationDuration`, `OpenAnimationScale`, `OpenAnimationOffset`, `CloseAnimationOffset`, `AsciiBackdrop`, `AsciiTextSize`, `AsciiPadding`, `AsciiFPS`, `AsciiRamp`, `AsciiColor`, and `AsciiMouseRipple`. The animated symbol backdrop is enabled by default. Set `AsciiBackdrop = false` to disable it; tweak the text size, border padding, frame rate, glyph ramp, color, or mouse ripple with the other `Ascii*` options. By default the window uses the same scale-based sizing and a 1.2415 aspect ratio as the reference. Press **RightShift** to hide or show it.
 
 ## Tab controls
 
