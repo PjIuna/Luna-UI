@@ -650,8 +650,10 @@ function LunaUI:CreateWindow(options)
 
     function window:_ConfigKey(tabName, controlType, controlOptions)
         controlOptions = type(controlOptions) == "table" and controlOptions or {}
-        local name = controlOptions.Flag or controlOptions.Name or controlType
-        return tostring(tabName) .. "/" .. tostring(name)
+        if controlOptions.Flag ~= nil then
+            return tostring(tabName) .. "/" .. tostring(controlOptions.Flag)
+        end
+        return tostring(tabName) .. "/" .. tostring(controlType) .. "/" .. tostring(controlOptions.Name or controlType)
     end
 
     function window:_HasSavedValue(key)
@@ -671,7 +673,16 @@ function LunaUI:CreateWindow(options)
     function window:_SetSavedValue(key, value, debounce)
         if not self._configEnabled then return end
         local valueType = typeof(value)
-        if valueType ~= "boolean" and valueType ~= "number" and valueType ~= "string" then
+        if valueType == "table" then
+            -- Only allow the plain numeric table used for window coordinates.
+            if key ~= "__windowPosition"
+                or type(value.XScale) ~= "number"
+                or type(value.XOffset) ~= "number"
+                or type(value.YScale) ~= "number"
+                or type(value.YOffset) ~= "number" then
+                return
+            end
+        elseif valueType ~= "boolean" and valueType ~= "number" and valueType ~= "string" then
             return
         end
         self._configData.Values[key] = value
@@ -1440,13 +1451,14 @@ function LunaUI:CreateWindow(options)
 
     local function destroyNow(self)
         if self._destroyed then return end
-        self._destroyed = true
-        self._closing = false
+        -- Flush pending settings before marking this object destroyed.
         if self._configEnabled then
             pcall(function()
                 self:SaveConfig()
             end)
         end
+        self._destroyed = true
+        self._closing = false
         if self._runtimeEnv and self._registryKey and self._runtimeEnv[self._registryKey] == self then
             self._runtimeEnv[self._registryKey] = nil
         end
