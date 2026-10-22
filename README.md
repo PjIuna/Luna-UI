@@ -106,10 +106,11 @@ Window:Notify({
 - `Window:Notify({Title, Content, Duration, Color})`
 - `Window:SetVisible(boolean)`
 - `Window:Toggle()`
-- `Window:Close()` plays the close animation and then removes the GUI.
-- `Window:Destroy()` immediately removes the GUI.
+- `Window:Close()` plays the close animation and minimizes the menu to a floating moon button.
+- Clicking the floating moon button reopens the menu.
+- `Window:Destroy()` immediately removes the GUI and its floating button.
 
-Window options: `Title`, `Width`, `Height`, `AspectRatio`, `ToggleKey`, `OpenAnimationDuration`, `CloseAnimationDuration`, `OpenAnimationScale`, `OpenAnimationOffset`, `CloseAnimationOffset`, `AsciiBackdrop`, `AsciiTextSize`, `AsciiPadding`, `AsciiFPS`, `AsciiRamp`, `AsciiColor`, and `AsciiMouseRipple`. The animated symbol backdrop is enabled by default. Set `AsciiBackdrop = false` to disable it; tweak the text size, border padding, frame rate, glyph ramp, color, or mouse ripple with the other `Ascii*` options. By default the window uses the same scale-based sizing and a 1.2415 aspect ratio as the reference. Press **RightShift** to hide or show it.
+Window options: `Title`, `Width`, `Height`, `AspectRatio`, `ToggleKey`, `OpenAnimationDuration`, `CloseAnimationDuration`, `OpenAnimationScale`, `OpenAnimationOffset`, `CloseAnimationOffset`, `AsciiBackdrop`, `AsciiTextSize`, `AsciiPadding`, `AsciiFPS`, `AsciiRamp`, `AsciiColor`, and `AsciiMouseRipple`. The animated symbol backdrop is enabled by default. When hidden, the menu leaves a small floating moon button near the bottom-left that reopens it. Notifications appear at the bottom-right of the game screen, including while the menu is hidden. Set `AsciiBackdrop = false` to disable the symbol effect; tweak the text size, border padding, frame rate, glyph ramp, color, or mouse ripple with the other `Ascii*` options. By default the window uses the same scale-based sizing and a 1.2415 aspect ratio as the reference. Press **RightShift** to hide or show it.
 
 ## Tab icon presets
 
