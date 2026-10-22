@@ -44,6 +44,60 @@ local IMAGES = {
     Copy = "rbxassetid://101160281432561",
 }
 
+-- Public icon presets. Use them as Icon = "Money" or Icon = LunaUI.Icons.Money.
+-- Presets refer to the icon images already used by the supplied reference UI.
+local ICON_PRESETS = {
+    home = IMAGES.Home,
+    house = IMAGES.Home,
+
+    money = IMAGES.Faker,
+    cash = IMAGES.Faker,
+    wallet = IMAGES.Faker,
+    coins = IMAGES.Faker,
+    faker = IMAGES.Faker,
+
+    logger = IMAGES.Logger,
+    logs = IMAGES.Logger,
+    clipboard = IMAGES.Logger,
+
+    supported = IMAGES.Supported,
+    shield = IMAGES.Supported,
+
+    passes = IMAGES.Passes,
+    ticket = IMAGES.Passes,
+    gamepass = IMAGES.Passes,
+
+    join = IMAGES.Join,
+    userplus = IMAGES.Join,
+
+    copy = IMAGES.Copy,
+    close = IMAGES.Close,
+    x = IMAGES.Close,
+}
+
+LunaUI.Icons = {
+    Home = IMAGES.Home,
+    House = IMAGES.Home,
+    Money = IMAGES.Faker,
+    Cash = IMAGES.Faker,
+    Wallet = IMAGES.Faker,
+    Coins = IMAGES.Faker,
+    Faker = IMAGES.Faker,
+    Logger = IMAGES.Logger,
+    Logs = IMAGES.Logger,
+    Clipboard = IMAGES.Logger,
+    Supported = IMAGES.Supported,
+    Shield = IMAGES.Supported,
+    Passes = IMAGES.Passes,
+    Ticket = IMAGES.Passes,
+    Gamepass = IMAGES.Passes,
+    Join = IMAGES.Join,
+    UserPlus = IMAGES.Join,
+    Copy = IMAGES.Copy,
+    Close = IMAGES.Close,
+    X = IMAGES.Close,
+}
+
 local FONT_FAMILY = "rbxasset://fonts/families/RobotoCondensed.json"
 local FONT = Font.new(FONT_FAMILY, Enum.FontWeight.Regular, Enum.FontStyle.Normal)
 local FONT_BOLD = Font.new(FONT_FAMILY, Enum.FontWeight.Bold, Enum.FontStyle.Normal)
@@ -141,12 +195,22 @@ end
 
 local function resolveIcon(name, provided)
     if type(provided) == "string" and provided ~= "" then
+        local preset = ICON_PRESETS[string.lower(provided)]
+        if preset then
+            return preset
+        end
         if provided:match("^%d+$") then
             return "rbxassetid://" .. provided
         end
+        -- Also accepts full Roblox asset IDs and image URLs.
         return provided
     end
+
     local key = tostring(name or "")
+    local preset = ICON_PRESETS[string.lower(key)]
+    if preset then
+        return preset
+    end
     for known, asset in pairs(IMAGES) do
         if string.lower(known) == string.lower(key) then
             return asset
