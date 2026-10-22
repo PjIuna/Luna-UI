@@ -1,6 +1,6 @@
 # 🌙 Luna UI
 
-A reusable Roblox UI toolkit modeled on the supplied Product Faker V2 interface: a compact near-black window, Roboto Condensed typography, charcoal rounded controls, a draggable title bar, image-only bottom navigation, a moving underline indicator, animated hover/selection states, an opening pop-in and closing shrink/fade, an opening slide/pop/fade and closing shrink/slide/fade animation, and the original-style animated ASCII-symbol field around the window. The symbols use a three-layer glow, fade outward from the panel, and ripple around the mouse.
+A reusable Roblox UI toolkit modeled on the supplied Product Faker V2 interface: a compact near-black window, Roboto Condensed typography, charcoal rounded controls, a draggable title bar, image-only bottom navigation, a moving underline indicator, animated hover/selection states, an opening slide/pop/fade and closing shrink/slide/fade animation, and the original-style animated ASCII-symbol field around the window. The symbols use a three-layer glow, fade outward from the panel, and ripple around the mouse.
 
 Luna UI provides the interface and callbacks. It does not include the original Product Faker features.
 
