@@ -1,10 +1,10 @@
 # 🌙 Luna UI
 
-A reusable Roblox UI library styled after the supplied Product Faker V2 reference: compact near-black window, charcoal panels, Roboto Condensed text, rounded corners, subtle outlines, animated bottom navigation, hover effects, and a draggable title bar.
+A reusable Roblox UI toolkit modeled on the supplied Product Faker V2 interface: a compact near-black window, Roboto Condensed typography, charcoal rounded controls, a draggable title bar, image-only bottom navigation, a moving underline indicator, and animated hover/selection states.
 
-Luna UI is a toolkit only. Your own callbacks decide what buttons, toggles, and sliders do.
+Luna UI provides the interface and callbacks. It does not include the original Product Faker features.
 
-## Load the library
+## Load
 
 ```lua
 local LunaUI = loadstring(game:HttpGet(
@@ -12,93 +12,121 @@ local LunaUI = loadstring(game:HttpGet(
 ))()
 ```
 
-## Quick start
+## Test script
+
+Use the same five icon tabs as the reference interface. Names such as `Home`, `Faker`, `Logger`, `Supported`, and `Passes` automatically use the matching reference icons.
 
 ```lua
 local Window = LunaUI:CreateWindow({
     Title = "🌙 Luna Scripts",
-    Width = 440,
-    Height = 355,
     ToggleKey = Enum.KeyCode.RightShift,
 })
 
-local Main = Window:CreateTab("Main")
-Main:CreateSection("Welcome")
-Main:CreateLabel("Welcome to Luna UI!")
-
-Main:CreateButton({
-    Name = "Test Button",
+local Home = Window:CreateTab("Home")
+Home:CreateParagraph("Welcome to Luna UI", {
+    Center = true,
+    TextSize = 18,
+    Height = 42,
+})
+Home:CreateParagraph("A reusable interface with the Product Faker V2 layout.", {
+    Center = true,
+    Color = Color3.fromRGB(193, 193, 193),
+    Height = 42,
+})
+Home:CreateButton({
+    Name = "Test Notification",
+    Description = "Click to test the toast animation",
     Callback = function()
-        print("Luna UI is working!")
         Window:Notify({
-            Title = "Button Test",
-            Content = "The button works!",
+            Title = "🌙 Luna UI",
+            Content = "The notification works!",
             Duration = 3,
         })
     end,
 })
 
-Main:CreateToggle({
-    Name = "Example Toggle",
-    Default = false,
-    Callback = function(enabled)
-        print("Toggle enabled:", enabled)
+local Faker = Window:CreateTab("Faker")
+Faker:CreateSection("Control tests")
+Faker:CreateLabel("This label uses the reference panel style.")
+Faker:CreateButton({
+    Name = "Test Button",
+    Description = "Writes a message to the output",
+    Callback = function()
+        print("[Luna UI] Button callback works")
     end,
 })
-
-Main:CreateSlider({
-    Name = "Example Slider",
+Faker:CreateToggle({
+    Name = "Test Toggle",
+    Default = false,
+    Callback = function(enabled)
+        print("[Luna UI] Toggle:", enabled)
+    end,
+})
+Faker:CreateSlider({
+    Name = "Test Slider",
     Min = 0,
     Max = 100,
     Default = 50,
     Callback = function(value)
-        print("Slider value:", value)
+        print("[Luna UI] Slider:", value)
+    end,
+})
+Faker:CreateInput({
+    Name = "Test Input",
+    Placeholder = "Type something, then press Enter",
+    Callback = function(value, enterPressed)
+        print("[Luna UI] Input:", value, "Enter:", enterPressed)
     end,
 })
 
-local Extras = Window:CreateTab("Extras")
-Extras:CreateSection("Other tests")
-Extras:CreateButton({
-    Name = "Show Notification",
-    Callback = function()
-        Window:Notify({
-            Title = "🌙 Luna UI",
-            Content = "Notifications are working!",
-            Duration = 3,
-        })
-    end,
+local Logger = Window:CreateTab("Logger")
+Logger:CreateSection("Logger test")
+Logger:CreateLabel("This is the Logger page.")
+
+local Supported = Window:CreateTab("Supported")
+Supported:CreateSection("Supported test")
+Supported:CreateLabel("This is the Supported page.")
+
+local Passes = Window:CreateTab("Passes")
+Passes:CreateSection("Passes test")
+Passes:CreateLabel("This is the Passes page.")
+
+Window:Notify({
+    Title = "🌙 Luna UI",
+    Content = "UI test loaded",
+    Duration = 3,
 })
 ```
 
-## API
+## Window API
 
-### Window
-- `LunaUI:CreateWindow(options)` creates a window.
-- `Window:CreateTab(name)` creates a bottom-navigation tab.
-- `Window:Notify({Title, Content, Duration})` shows a notification.
-- `Window:SetVisible(boolean)` shows or hides the window.
-- `Window:Toggle()` toggles visibility.
-- `Window:Destroy()` removes the GUI and disconnects the window's tracked connections.
+- `LunaUI:CreateWindow(options)`
+- `Window:CreateTab(name, {Icon = "rbxassetid://..."})`
+- `Window:SetTitle(text)`
+- `Window:Notify({Title, Content, Duration, Color})`
+- `Window:SetVisible(boolean)`
+- `Window:Toggle()`
+- `Window:Destroy()`
 
-Window options:
-- `Title`: title text; defaults to `🌙 Luna UI`.
-- `Width` and `Height`: starting window dimensions.
-- `AspectRatio`: optional aspect-ratio override; defaults to `1.2415`.
-- `ToggleKey`: keyboard key used to toggle visibility; defaults to `Enum.KeyCode.RightShift`.
+Window options: `Title`, `Width`, `Height`, `AspectRatio`, and `ToggleKey`. By default the window uses the same scale-based sizing and a 1.2415 aspect ratio as the reference. Press **RightShift** to hide or show it.
 
-### Tab components
+## Tab controls
+
 - `Tab:CreateSection(name)`
 - `Tab:CreateLabel(text)`
-- `Tab:CreateButton({Name, Callback})`
+- `Tab:CreateParagraph(text, {Center, Color, TextSize, Height, Italic, Background})`
+- `Tab:CreateButton({Name, Description, Subtext, Icon, Callback})`
 - `Tab:CreateToggle({Name, Default, Callback})`
 - `Tab:CreateSlider({Name, Min, Max, Default, Callback})`
+- `Tab:CreateInput({Name, Placeholder, Default, Callback})`
 
-Toggle callbacks receive a boolean. Slider callbacks receive a number. Button callbacks receive no arguments. Callback errors are caught and sent to `warn`.
+Toggle callbacks receive a boolean. Slider callbacks receive a number. Input callbacks receive the text and an `enterPressed` boolean when focus is lost. Callback errors are sent to `warn`.
 
-Toggle and slider controls return objects with `GetValue()`, `SetValue(value)`, and an `Instance` reference to their row.
+Toggle and slider controls return objects with `GetValue()`, `SetValue(value)`, and an `Instance` reference.
 
 ## Notes
-- Intended for client-side LocalScript use in an experience you control or a compatible test environment.
-- Some executor-specific functions, such as `gethui` and `loadstring`, are not available in standard Roblox scripts.
-- The UI code has not been runtime-tested in Roblox yet; report the exact console error if you find an issue.
-- Only run code you understand and trust, and follow the rules of the Roblox experience you're using.
+
+- The library provides the UI only; callbacks are where your script's own behavior goes.
+- Intended for client-side UI in an experience you control or a compatible test environment.
+- Executor-only functions such as `gethui` and `loadstring` are not available in standard Roblox scripts.
+- The revised layout has not yet been runtime-tested in Roblox. If it errors, use the exact console message to diagnose it.
