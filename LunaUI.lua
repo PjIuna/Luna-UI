@@ -11,6 +11,8 @@
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TextService = game:GetService("TextService")
 
 local LunaUI = {}
 LunaUI.__index = LunaUI
@@ -200,6 +202,7 @@ function LunaUI:CreateWindow(options)
         BackgroundColor3 = COLORS.bg,
         BorderSizePixel = 0,
         ClipsDescendants = true,
+        ZIndex = 2,
     })
     round(main, 8)
     outline(main, 0.74)
@@ -214,6 +217,61 @@ function LunaUI:CreateWindow(options)
         DominantAxis = Enum.DominantAxis.Width,
     })
     local mainScale = make("UIScale", {Parent = main, Scale = 1})
+
+    -- Animated ASCII-symbol backdrop from the original reference UI.
+    -- The ASCII field is cut out wherever the main window sits, so the symbols
+    -- glow around the panel instead of being drawn on top of its controls.
+    local asciiConfig = {
+        enabled = options.AsciiBackdrop ~= false,
+        textSize = math.clamp(tonumber(options.AsciiTextSize) or 13, 8, 20),
+        padding = math.clamp(tonumber(options.AsciiPadding) or 80, 35, 180),
+        fps = math.clamp(tonumber(options.AsciiFPS) or 30, 8, 60),
+        ramp = type(options.AsciiRamp) == "string" and #options.AsciiRamp > 1
+            and options.AsciiRamp or " .,:;-=+*x#%@",
+        color = typeof(options.AsciiColor) == "Color3" and options.AsciiColor or COLORS.white,
+        mouse = options.AsciiMouseRipple ~= false,
+    }
+
+    local asciiHolder = make("Frame", {
+        Name = "AsciiBackdrop",
+        Parent = screenGui,
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = main.Position,
+        Size = UDim2.fromOffset(1, 1),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        ClipsDescendants = true,
+        Visible = asciiConfig.enabled,
+        ZIndex = 1,
+    })
+    local asciiLabels = {}
+    local asciiLayers = {
+        {min = 0.1, transparency = 0.84},
+        {min = 0.4, transparency = 0.62},
+        {min = 0.7, transparency = 0.3},
+    }
+    for i = 1, #asciiLayers do
+        asciiLabels[i] = make("TextLabel", {
+            Name = "AsciiLayer" .. i,
+            Parent = asciiHolder,
+            Size = UDim2.fromOffset(1, 1),
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+            Font = Enum.Font.Code,
+            TextSize = asciiConfig.textSize,
+            TextColor3 = asciiConfig.color,
+            TextTransparency = 1,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextYAlignment = Enum.TextYAlignment.Top,
+            TextWrapped = false,
+            RichText = false,
+            Text = "",
+            ZIndex = 1,
+        })
+    end
+    local asciiAlpha = Instance.new("NumberValue")
+    asciiAlpha.Name = "AsciiAlpha"
+    asciiAlpha.Value = asciiConfig.enabled and 1 or 0
 
     local topBar = make("Frame", {
         Name = "TopBar",
@@ -318,12 +376,145 @@ function LunaUI:CreateWindow(options)
         _destroyed = false,
         _visible = true,
         _title = title,
+        _asciiAlpha = asciiAlpha,
+        _asciiHolder = asciiHolder,
+        _asciiConfig = asciiConfig,
     }, {__index = LunaUI})
 
     local function track(connection)
         table.insert(window._connections, connection)
         return connection
     end
+
+    -- Approximate monospace cell geometry with Roblox's own text metrics.
+    local asciiFont = Enum.Font.Code
+    local hugeTextArea = Vector2.new(100000, 100000)
+    local asciiTextSize = asciiConfig.textSize
+    local cellWidth = TextService:GetTextSize(string.rep("M", 40), asciiTextSize, asciiFont, hugeTextArea).X / 40
+    local oneLineHeight = TextService:GetTextSize("M", asciiTextSize, asciiFont, hugeTextArea).Y
+    local tenLineHeight = TextService:GetTextSize(string.rep("M\n", 10) .. "M", asciiTextSize, asciiFont, hugeTextArea).Y
+    local cellHeight = (tenLineHeight - oneLineHeight) / 10
+    if cellWidth <= 0 then cellWidth = asciiTextSize * 0.6 end
+    if cellHeight <= 0 then cellHeight = asciiTextSize end
+    local asciiRamp = {}
+    for i = 1, #asciiConfig.ramp do
+        asciiRamp[i] = asciiConfig.ramp:sub(i, i)
+    end
+    local asciiRampLength = #asciiRamp
+    local asciiColumns, asciiRows = 0, 0
+    local asciiOffsetX, asciiOffsetY = 0, 0
+    local asciiGlow = {}
+    local asciiBuffers = {{}, {}, {}}
+    local asciiLines = {{}, {}, {}}
+    local lastAsciiArea, asciiAccumulator = nil, 0
+    local asciiStart = os.clock()
+
+    local function rebuildAscii(area, inner)
+        asciiColumns = math.max(1, math.floor(area.X / cellWidth))
+        asciiRows = math.max(1, math.floor(area.Y / cellHeight))
+        asciiOffsetX = (area.X - asciiColumns * cellWidth) / 2
+        asciiOffsetY = (area.Y - asciiRows * cellHeight) / 2
+        for _, textLayer in ipairs(asciiLabels) do
+            textLayer.Position = UDim2.fromOffset(asciiOffsetX, asciiOffsetY)
+            textLayer.Size = UDim2.fromOffset(asciiColumns * cellWidth + 4, asciiRows * cellHeight + 4)
+        end
+
+        local centerX, centerY = area.X / 2, area.Y / 2
+        local halfWidth, halfHeight = inner.X / 2, inner.Y / 2
+        table.clear(asciiGlow)
+        for y = 0, asciiRows - 1 do
+            local qy = math.max(math.abs(asciiOffsetY + (y + 0.5) * cellHeight - centerY) - halfHeight, 0)
+            for x = 0, asciiColumns - 1 do
+                local qx = math.max(math.abs(asciiOffsetX + (x + 0.5) * cellWidth - centerX) - halfWidth, 0)
+                local index = y * asciiColumns + x + 1
+                if qx == 0 and qy == 0 then
+                    asciiGlow[index] = -1
+                else
+                    local g = math.clamp(1 - math.sqrt(qx * qx + qy * qy) / asciiConfig.padding, 0, 1)
+                    asciiGlow[index] = g * g * (3 - 2 * g)
+                end
+            end
+        end
+        for _, buffer in ipairs(asciiBuffers) do table.clear(buffer) end
+    end
+
+    local function renderAscii(dt)
+        asciiHolder.Position = main.Position
+        if not asciiConfig.enabled then return end
+        local alpha = asciiAlpha.Value
+        if alpha <= 0.001 then return end
+
+        asciiAccumulator += dt
+        if asciiAccumulator < 1 / asciiConfig.fps then return end
+        asciiAccumulator = 0
+
+        local scale = mainScale.Scale > 0 and mainScale.Scale or 1
+        local abs = main.AbsoluteSize
+        if abs.X < 1 or abs.Y < 1 then return end
+        local inner = Vector2.new(math.floor(abs.X / scale + 0.5), math.floor(abs.Y / scale + 0.5))
+        local area = inner + Vector2.new(asciiConfig.padding * 2, asciiConfig.padding * 2)
+        if area ~= lastAsciiArea then
+            lastAsciiArea = area
+            asciiHolder.Size = UDim2.fromOffset(area.X, area.Y)
+            rebuildAscii(area, inner)
+        end
+
+        local mouseX, mouseY
+        if asciiConfig.mouse then
+            local mouse = UserInputService:GetMouseLocation() - asciiHolder.AbsolutePosition
+            if mouse.X >= 0 and mouse.Y >= 0 and mouse.X <= area.X and mouse.Y <= area.Y then
+                mouseX, mouseY = mouse.X / cellWidth, mouse.Y / cellHeight
+            end
+        end
+
+        local t = os.clock() - asciiStart
+        local noise, sin, cos, sqrt, exp, floor = math.noise, math.sin, math.cos, math.sqrt, math.exp, math.floor
+        local b1, b2, b3 = asciiBuffers[1], asciiBuffers[2], asciiBuffers[3]
+        local l1, l2, l3 = asciiLines[1], asciiLines[2], asciiLines[3]
+        local min1, min2, min3 = asciiLayers[1].min, asciiLayers[2].min, asciiLayers[3].min
+        local aspect = cellHeight / cellWidth
+        for y = 0, asciiRows - 1 do
+            local base = y * asciiColumns
+            local ny = y * 0.11 - t * 0.35
+            local wy = cos(y * 0.21 - t * 0.7)
+            for x = 0, asciiColumns - 1 do
+                local glow = asciiGlow[base + x + 1]
+                local c1, c2, c3 = " ", " ", " "
+                if glow > 0 then
+                    local v = 0.45 + noise(x * 0.055, ny, t * 0.12) * 1.3
+                        + sin(x * 0.12 + t * 1.1) * wy * 0.18
+                    if mouseX then
+                        local dx, dy = x - mouseX, (y - mouseY) * aspect
+                        local distance = sqrt(dx * dx + dy * dy)
+                        v += sin(distance * 0.45 - t * 7) * exp(-distance * 0.09) * 0.45
+                    end
+                    v *= glow * alpha
+                    if v >= min1 then
+                        local index = math.clamp(floor(v * asciiRampLength) + 1, 2, asciiRampLength)
+                        local glyph = asciiRamp[index]
+                        if v >= min3 then
+                            c3 = glyph
+                        elseif v >= min2 then
+                            c2 = glyph
+                        else
+                            c1 = glyph
+                        end
+                    end
+                end
+                b1[x + 1], b2[x + 1], b3[x + 1] = c1, c2, c3
+            end
+            l1[y + 1] = table.concat(b1, "", 1, asciiColumns)
+            l2[y + 1] = table.concat(b2, "", 1, asciiColumns)
+            l3[y + 1] = table.concat(b3, "", 1, asciiColumns)
+        end
+        asciiLabels[1].Text = table.concat(l1, "\n", 1, asciiRows)
+        asciiLabels[2].Text = table.concat(l2, "\n", 1, asciiRows)
+        asciiLabels[3].Text = table.concat(l3, "\n", 1, asciiRows)
+        for i, layer in ipairs(asciiLayers) do
+            asciiLabels[i].TextTransparency = 1 - (1 - layer.transparency) * alpha
+        end
+    end
+    track(RunService.RenderStepped:Connect(renderAscii))
 
     local function updateIndicator(instant)
         local tab = window._activeTab
@@ -900,11 +1091,19 @@ function LunaUI:CreateWindow(options)
             self._main.Visible = true
             self._mainScale.Scale = 0.96
             animate(self._mainScale, 0.2, {Scale = 1}, Enum.EasingStyle.Back)
+            if self._asciiConfig.enabled then
+                self._asciiHolder.Visible = true
+                animate(self._asciiAlpha, 0.28, {Value = 1}, Enum.EasingStyle.Sine)
+            end
         else
             animate(self._mainScale, 0.15, {Scale = 0.96})
-            task.delay(0.16, function()
+            if self._asciiConfig.enabled then
+                animate(self._asciiAlpha, 0.18, {Value = 0}, Enum.EasingStyle.Quad)
+            end
+            task.delay(0.21, function()
                 if not self._visible and not self._destroyed then
                     self._gui.Enabled = false
+                    self._asciiHolder.Visible = false
                 end
             end)
         end
@@ -920,6 +1119,7 @@ function LunaUI:CreateWindow(options)
         for _, connection in ipairs(self._connections) do
             pcall(function() connection:Disconnect() end)
         end
+        pcall(function() self._asciiAlpha:Destroy() end)
         self._gui:Destroy()
     end
 
