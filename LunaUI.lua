@@ -433,6 +433,39 @@ function LunaUI:CreateWindow(options)
     })
     round(indicator, 1)
 
+    -- Small floating square that restores the menu after it is hidden.
+    local restoreButton = make("TextButton", {
+        Name = "LunaRestoreButton",
+        Parent = screenGui,
+        AnchorPoint = Vector2.new(0, 1),
+        Position = UDim2.new(0, 22, 1, -22),
+        Size = UDim2.fromOffset(42, 42),
+        BackgroundColor3 = COLORS.panel,
+        BorderSizePixel = 0,
+        AutoButtonColor = false,
+        Text = "☾",
+        FontFace = FONT_BOLD,
+        TextSize = 24,
+        TextColor3 = COLORS.white,
+        Visible = false,
+        ZIndex = 100,
+    })
+    round(restoreButton, 9)
+    outline(restoreButton, 0.72)
+    local restoreScale = make("UIScale", {
+        Parent = restoreButton,
+        Scale = 0.72,
+    })
+    local restoreStroke = restoreButton:FindFirstChildOfClass("UIStroke")
+    restoreButton.MouseEnter:Connect(function()
+        animate(restoreButton, 0.15, {BackgroundColor3 = COLORS.buttonHi})
+        animate(restoreScale, 0.2, {Scale = 1.06}, Enum.EasingStyle.Back)
+    end)
+    restoreButton.MouseLeave:Connect(function()
+        animate(restoreButton, 0.2, {BackgroundColor3 = COLORS.panel})
+        animate(restoreScale, 0.2, {Scale = 1})
+    end)
+
     local window = setmetatable({
         _gui = screenGui,
         _main = main,
@@ -441,6 +474,8 @@ function LunaUI:CreateWindow(options)
         _bottomBar = bottomBar,
         _buttons = buttonContainer,
         _indicator = indicator,
+        _restoreButton = restoreButton,
+        _restoreScale = restoreScale,
         _tabs = {},
         _activeTab = nil,
         _connections = {},
@@ -1119,14 +1154,18 @@ function LunaUI:CreateWindow(options)
         if type(config) ~= "table" then
             config = {Content = tostring(config or "")}
         end
-        local existing = main:FindFirstChild("LunaToast")
+
+        -- Notifications belong to the full screen, not the menu panel, so they
+        -- remain visible when the main window is minimized.
+        local existing = screenGui:FindFirstChild("LunaToast")
         if existing then existing:Destroy() end
+
         local toast = make("TextLabel", {
             Name = "LunaToast",
-            Parent = main,
-            AnchorPoint = Vector2.new(0.5, 1),
-            Position = UDim2.new(0.5, 0, 0.875, 6),
-            Size = UDim2.fromOffset(0, 26),
+            Parent = screenGui,
+            AnchorPoint = Vector2.new(1, 1),
+            Position = UDim2.new(1, -18, 1, 24),
+            Size = UDim2.fromOffset(0, 30),
             AutomaticSize = Enum.AutomaticSize.X,
             BackgroundColor3 = COLORS.panel,
             BackgroundTransparency = 1,
@@ -1136,9 +1175,10 @@ function LunaUI:CreateWindow(options)
             TextColor3 = config.Color or COLORS.white,
             TextTransparency = 1,
             Text = tostring(config.Content or config.Title or ""),
-            ZIndex = 20,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            ZIndex = 200,
         }, {
-            make("UICorner", {CornerRadius = UDim.new(0, 13)}),
+            make("UICorner", {CornerRadius = UDim.new(0, 9)}),
             make("UIPadding", {
                 PaddingLeft = UDim.new(0, 12),
                 PaddingRight = UDim.new(0, 12),
@@ -1153,12 +1193,17 @@ function LunaUI:CreateWindow(options)
         animate(toast, 0.3, {
             BackgroundTransparency = 0,
             TextTransparency = 0,
-            Position = UDim2.new(0.5, 0, 0.875, -6),
-        })
+            Position = UDim2.new(1, -22, 1, -22),
+        }, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
         if toastStroke then animate(toastStroke, 0.3, {Transparency = 0.8}) end
+
         task.delay(tonumber(config.Duration) or 2.5, function()
             if toast.Parent and not self._destroyed then
-                animate(toast, 0.25, {BackgroundTransparency = 1, TextTransparency = 1})
+                animate(toast, 0.25, {
+                    BackgroundTransparency = 1,
+                    TextTransparency = 1,
+                    Position = UDim2.new(1, -18, 1, 24),
+                }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
                 if toastStroke then animate(toastStroke, 0.25, {Transparency = 1}) end
                 task.delay(0.3, function()
                     if toast.Parent then toast:Destroy() end
@@ -1192,6 +1237,7 @@ function LunaUI:CreateWindow(options)
         local targetPosition = self._restPosition or self._main.Position
 
         self._gui.Enabled = true
+        self._restoreButton.Visible = false
         self._main.Visible = true
         self._main.Position = offsetPosition(targetPosition, self._openOffset)
         self._mainScale.Scale = self._openScale
@@ -1223,11 +1269,15 @@ function LunaUI:CreateWindow(options)
         end)
     end
 
-    local function playHide(self, shouldDestroy)
+    local function playHide(self)
         if self._destroyed then return end
         local targetPosition = self._restPosition or self._main.Position
         local duration = self._closeDuration
         local endingPosition = offsetPosition(targetPosition, self._closeOffset)
+
+        -- Ensure the floating restore button and toasts can remain visible.
+        self._gui.Enabled = true
+        self._restoreButton.Visible = false
 
         animate(self._mainScale, duration, {
             Scale = self._openScale,
@@ -1244,18 +1294,18 @@ function LunaUI:CreateWindow(options)
         end
 
         task.delay(duration + 0.06, function()
-            if self._destroyed then return end
-            if shouldDestroy then
-                destroyNow(self)
-            elseif not self._visible then
-                self._gui.Enabled = false
-                self._main.Position = targetPosition
-                self._mainScale.Scale = 1
-                self._main.GroupTransparency = 0
-                if self._asciiConfig.enabled then
-                    self._asciiHolder.Visible = false
-                end
+            if self._destroyed or self._visible then return end
+            self._main.Visible = false
+            self._main.Position = targetPosition
+            self._mainScale.Scale = 1
+            self._main.GroupTransparency = 0
+            if self._asciiConfig.enabled then
+                self._asciiHolder.Visible = false
             end
+
+            self._restoreButton.Visible = true
+            self._restoreScale.Scale = 0.72
+            animate(self._restoreScale, 0.24, {Scale = 1}, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
         end)
     end
 
@@ -1268,7 +1318,7 @@ function LunaUI:CreateWindow(options)
         if visible then
             playOpen(self)
         else
-            playHide(self, false)
+            playHide(self)
         end
     end
 
@@ -1276,35 +1326,18 @@ function LunaUI:CreateWindow(options)
         self:SetVisible(not self._visible)
     end
 
-    -- Close button: slide down, shrink, and fade out before destroying the GUI.
+    -- Close now minimizes to the floating restore square. Destroy() removes everything.
     function window:Close()
-        if self._destroyed or self._closing then return end
-        self._closing = true
-        self._visible = false
-
-        local targetPosition = self._restPosition or self._main.Position
-        animate(self._mainScale, self._closeDuration, {
-            Scale = self._openScale * 0.78,
-        }, Enum.EasingStyle.Back, Enum.EasingDirection.In)
-        animate(self._main, self._closeDuration, {
-            GroupTransparency = 1,
-            Position = offsetPosition(targetPosition, self._closeOffset + 12),
-        }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
-
-        if self._asciiConfig.enabled then
-            animate(self._asciiAlpha, self._closeDuration, {
-                Value = 0,
-            }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
-        end
-
-        task.delay(self._closeDuration + 0.06, function()
-            destroyNow(self)
-        end)
+        self:SetVisible(false)
     end
 
     function window:Destroy()
         destroyNow(self)
     end
+
+    track(restoreButton.Activated:Connect(function()
+        window:SetVisible(true)
+    end))
 
     track(closeButton.Activated:Connect(function()
         window:Close()
