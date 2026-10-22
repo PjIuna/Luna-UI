@@ -193,15 +193,17 @@ function LunaUI:CreateWindow(options)
         mainSize = UDim2.fromScale(0.285, 0.439)
     end
 
-    local main = make("Frame", {
+    local main = make("CanvasGroup", {
         Name = "Main",
         Parent = screenGui,
         AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.fromScale(0.5, 0.5),
         Size = mainSize,
         BackgroundColor3 = COLORS.bg,
+        BackgroundTransparency = 0,
         BorderSizePixel = 0,
         ClipsDescendants = true,
+        GroupTransparency = 1,
         ZIndex = 2,
     })
     round(main, 8)
@@ -216,7 +218,10 @@ function LunaUI:CreateWindow(options)
         AspectRatio = tonumber(options.AspectRatio) or 1.2415,
         DominantAxis = Enum.DominantAxis.Width,
     })
-    local mainScale = make("UIScale", {Parent = main, Scale = 1})
+    local openDuration = math.clamp(tonumber(options.OpenAnimationDuration) or 0.34, 0.12, 1)
+    local closeDuration = math.clamp(tonumber(options.CloseAnimationDuration) or 0.22, 0.1, 1)
+    local openScale = math.clamp(tonumber(options.OpenAnimationScale) or 0.78, 0.5, 0.95)
+    local mainScale = make("UIScale", {Parent = main, Scale = openScale})
 
     -- Animated ASCII-symbol backdrop from the original reference UI.
     -- The ASCII field is cut out wherever the main window sits, so the symbols
@@ -271,7 +276,7 @@ function LunaUI:CreateWindow(options)
     end
     local asciiAlpha = Instance.new("NumberValue")
     asciiAlpha.Name = "AsciiAlpha"
-    asciiAlpha.Value = asciiConfig.enabled and 1 or 0
+    asciiAlpha.Value = 0
 
     local topBar = make("Frame", {
         Name = "TopBar",
@@ -374,7 +379,11 @@ function LunaUI:CreateWindow(options)
         _activeTab = nil,
         _connections = {},
         _destroyed = false,
+        _closing = false,
         _visible = true,
+        _openDuration = openDuration,
+        _closeDuration = closeDuration,
+        _openScale = openScale,
         _title = title,
         _asciiAlpha = asciiAlpha,
         _asciiHolder = asciiHolder,
@@ -1083,24 +1092,42 @@ function LunaUI:CreateWindow(options)
         end)
     end
 
-    function window:SetVisible(visible)
+    local function destroyNow(self)
         if self._destroyed then return end
-        self._visible = visible == true
-        if self._visible then
+        self._destroyed = true
+        self._closing = false
+        for _, connection in ipairs(self._connections) do
+            pcall(function() connection:Disconnect() end)
+        end
+        pcall(function() self._asciiAlpha:Destroy() end)
+        self._gui:Destroy()
+    end
+
+    function window:SetVisible(visible)
+        if self._destroyed or self._closing then return end
+        visible = visible == true
+        if self._visible == visible then return end
+        self._visible = visible
+
+        if visible then
             self._gui.Enabled = true
             self._main.Visible = true
-            self._mainScale.Scale = 0.96
-            animate(self._mainScale, 0.2, {Scale = 1}, Enum.EasingStyle.Back)
+            self._mainScale.Scale = self._openScale
+            self._main.GroupTransparency = 1
+            animate(self._mainScale, self._openDuration, {Scale = 1}, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+            animate(self._main, self._openDuration * 0.85, {GroupTransparency = 0}, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
             if self._asciiConfig.enabled then
                 self._asciiHolder.Visible = true
-                animate(self._asciiAlpha, 0.28, {Value = 1}, Enum.EasingStyle.Sine)
+                self._asciiAlpha.Value = 0
+                animate(self._asciiAlpha, self._openDuration + 0.08, {Value = 1}, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
             end
         else
-            animate(self._mainScale, 0.15, {Scale = 0.96})
+            animate(self._mainScale, self._closeDuration, {Scale = self._openScale}, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+            animate(self._main, self._closeDuration, {GroupTransparency = 1}, Enum.EasingStyle.Sine, Enum.EasingDirection.In)
             if self._asciiConfig.enabled then
-                animate(self._asciiAlpha, 0.18, {Value = 0}, Enum.EasingStyle.Quad)
+                animate(self._asciiAlpha, self._closeDuration * 0.9, {Value = 0}, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
             end
-            task.delay(0.21, function()
+            task.delay(self._closeDuration + 0.04, function()
                 if not self._visible and not self._destroyed then
                     self._gui.Enabled = false
                     self._asciiHolder.Visible = false
@@ -1113,18 +1140,27 @@ function LunaUI:CreateWindow(options)
         self:SetVisible(not self._visible)
     end
 
-    function window:Destroy()
-        if self._destroyed then return end
-        self._destroyed = true
-        for _, connection in ipairs(self._connections) do
-            pcall(function() connection:Disconnect() end)
+    -- Close button: shrink and fade everything out before destroying the GUI.
+    function window:Close()
+        if self._destroyed or self._closing then return end
+        self._closing = true
+        self._visible = false
+        animate(self._mainScale, self._closeDuration, {Scale = self._openScale * 0.88}, Enum.EasingStyle.Back, Enum.EasingDirection.In)
+        animate(self._main, self._closeDuration, {GroupTransparency = 1}, Enum.EasingStyle.Sine, Enum.EasingDirection.In)
+        if self._asciiConfig.enabled then
+            animate(self._asciiAlpha, self._closeDuration * 0.9, {Value = 0}, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
         end
-        pcall(function() self._asciiAlpha:Destroy() end)
-        self._gui:Destroy()
+        task.delay(self._closeDuration + 0.04, function()
+            destroyNow(self)
+        end)
+    end
+
+    function window:Destroy()
+        destroyNow(self)
     end
 
     track(closeButton.Activated:Connect(function()
-        window:Destroy()
+        window:Close()
     end))
 
     -- Drag the window from the title area, like the reference script.
@@ -1167,6 +1203,20 @@ function LunaUI:CreateWindow(options)
     track(bottomBar:GetPropertyChangedSignal("AbsolutePosition"):Connect(function()
         updateIndicator(true)
     end))
+
+    -- First launch: pop in from a smaller scale while the symbol field fades up.
+    task.defer(function()
+        if window._destroyed or window._closing then return end
+        mainScale.Scale = openScale
+        main.GroupTransparency = 1
+        animate(mainScale, openDuration, {Scale = 1}, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+        animate(main, openDuration * 0.85, {GroupTransparency = 0}, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+        if asciiConfig.enabled then
+            asciiAlpha.Value = 0
+            asciiHolder.Visible = true
+            animate(asciiAlpha, openDuration + 0.08, {Value = 1}, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+        end
+    end)
 
     return window
 end
