@@ -816,52 +816,50 @@ function LunaUI:CreateWindow(options)
             if type(controlOptions) ~= "table" then
                 controlOptions = {Name = tostring(controlOptions or "Button")}
             end
+
+            local description = controlOptions.Description or controlOptions.Subtext
+            local hasDescription = type(description) == "string" and description ~= ""
+            local rowHeight = hasDescription and 44 or 34
+
+            -- Compact text-only button: no placeholder icon or gray square.
             local row = make("TextButton", {
                 Name = "ButtonRow",
                 Parent = self._items,
-                Size = UDim2.new(1, -4, 0, 66),
+                Size = UDim2.new(1, -4, 0, rowHeight),
                 BackgroundColor3 = COLORS.panel,
                 BorderSizePixel = 0,
                 AutoButtonColor = false,
                 Text = "",
+                TextTransparency = 1,
             })
             row:SetAttribute("IsLunaRow", true)
-            round(row, 8)
+            round(row, 7)
             outline(row, 0.9)
-            local icon = make("ImageLabel", {
-                Name = "Icon",
-                Parent = row,
-                AnchorPoint = Vector2.new(0.5, 0.5),
-                Position = UDim2.new(0, 35, 0.5, 0),
-                Size = UDim2.fromOffset(49, 49),
-                BackgroundColor3 = COLORS.button,
-                BorderSizePixel = 0,
-                Image = resolveIcon(controlOptions.Name, controlOptions.Icon),
-                ImageColor3 = COLORS.icon,
-                ScaleType = Enum.ScaleType.Crop,
-            })
-            round(icon, 7)
-            outline(icon, 0.9)
+
             label(row, controlOptions.Name or "Button", {
                 AnchorPoint = Vector2.new(0, 0.5),
-                Position = UDim2.new(0, 71, 0, 24),
-                Size = UDim2.new(1, -120, 0, 17),
+                Position = UDim2.new(0, 10, 0, hasDescription and 13 or rowHeight / 2),
+                Size = UDim2.new(1, -20, 0, 18),
                 FontFace = FONT_BOLD,
                 TextXAlignment = Enum.TextXAlignment.Left,
+                TextYAlignment = Enum.TextYAlignment.Center,
                 TextScaled = false,
-                TextSize = 14,
+                TextSize = 13,
             })
-            if controlOptions.Description or controlOptions.Subtext then
-                label(row, controlOptions.Description or controlOptions.Subtext, {
+
+            if hasDescription then
+                label(row, description, {
                     AnchorPoint = Vector2.new(0, 0.5),
-                    Position = UDim2.new(0, 71, 0, 43),
-                    Size = UDim2.new(1, -120, 0, 16),
+                    Position = UDim2.new(0, 10, 0, 31),
+                    Size = UDim2.new(1, -20, 0, 13),
                     TextXAlignment = Enum.TextXAlignment.Left,
+                    TextYAlignment = Enum.TextYAlignment.Center,
                     TextColor3 = COLORS.icon,
                     TextScaled = false,
-                    TextSize = 12,
+                    TextSize = 11,
                 })
             end
+
             local hoverScale = make("UIScale", {Parent = row})
             row.MouseEnter:Connect(function()
                 animate(row, 0.15, {BackgroundColor3 = COLORS.panelHi})
