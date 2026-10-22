@@ -1278,6 +1278,8 @@ function LunaUI:CreateWindow(options)
             track(UserInputService.InputEnded:Connect(function(input)
                 if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
                     dragging = false
+                    -- Flush the final slider position immediately after dragging stops.
+                    self._window:_SetSavedValue(configKey, value, false)
                 end
             end))
             if hasSavedValue and type(controlOptions.Callback) == "function" then
