@@ -165,6 +165,8 @@ function LunaUI:CreateWindow(options)
     screenGui.IgnoreGuiInset = true
     screenGui.DisplayOrder = 999
     screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    -- Keep the screen hidden during construction so the intro starts from a clean frame.
+    screenGui.Enabled = false
 
     local mounted = false
     if typeof(gethui) == "function" then
@@ -384,6 +386,9 @@ function LunaUI:CreateWindow(options)
         _openDuration = openDuration,
         _closeDuration = closeDuration,
         _openScale = openScale,
+        _restPosition = main.Position,
+        _openOffset = math.clamp(tonumber(options.OpenAnimationOffset) or 34, 12, 100),
+        _closeOffset = math.clamp(tonumber(options.CloseAnimationOffset) or 24, 8, 80),
         _title = title,
         _asciiAlpha = asciiAlpha,
         _asciiHolder = asciiHolder,
@@ -1092,6 +1097,15 @@ function LunaUI:CreateWindow(options)
         end)
     end
 
+    local function offsetPosition(position, yOffset)
+        return UDim2.new(
+            position.X.Scale,
+            position.X.Offset,
+            position.Y.Scale,
+            position.Y.Offset + yOffset
+        )
+    end
+
     local function destroyNow(self)
         if self._destroyed then return end
         self._destroyed = true
@@ -1103,6 +1117,78 @@ function LunaUI:CreateWindow(options)
         self._gui:Destroy()
     end
 
+    local function playOpen(self)
+        if self._destroyed or self._closing then return end
+        local targetPosition = self._restPosition or self._main.Position
+
+        self._gui.Enabled = true
+        self._main.Visible = true
+        self._main.Position = offsetPosition(targetPosition, self._openOffset)
+        self._mainScale.Scale = self._openScale
+        self._main.GroupTransparency = 1
+
+        if self._asciiConfig.enabled then
+            self._asciiHolder.Visible = true
+            self._asciiAlpha.Value = 0
+        end
+
+        -- Allow at least one rendered frame in the start state before tweening.
+        task.spawn(function()
+            RunService.RenderStepped:Wait()
+            if self._destroyed or self._closing or not self._visible then return end
+
+            animate(self._mainScale, self._openDuration, {
+                Scale = 1,
+            }, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+            animate(self._main, self._openDuration, {
+                GroupTransparency = 0,
+                Position = targetPosition,
+            }, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+
+            if self._asciiConfig.enabled then
+                animate(self._asciiAlpha, self._openDuration + 0.12, {
+                    Value = 1,
+                }, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+            end
+        end)
+    end
+
+    local function playHide(self, shouldDestroy)
+        if self._destroyed then return end
+        local targetPosition = self._restPosition or self._main.Position
+        local duration = self._closeDuration
+        local endingPosition = offsetPosition(targetPosition, self._closeOffset)
+
+        animate(self._mainScale, duration, {
+            Scale = self._openScale,
+        }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+        animate(self._main, duration, {
+            GroupTransparency = 1,
+            Position = endingPosition,
+        }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+
+        if self._asciiConfig.enabled then
+            animate(self._asciiAlpha, duration, {
+                Value = 0,
+            }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+        end
+
+        task.delay(duration + 0.06, function()
+            if self._destroyed then return end
+            if shouldDestroy then
+                destroyNow(self)
+            elseif not self._visible then
+                self._gui.Enabled = false
+                self._main.Position = targetPosition
+                self._mainScale.Scale = 1
+                self._main.GroupTransparency = 0
+                if self._asciiConfig.enabled then
+                    self._asciiHolder.Visible = false
+                end
+            end
+        end)
+    end
+
     function window:SetVisible(visible)
         if self._destroyed or self._closing then return end
         visible = visible == true
@@ -1110,29 +1196,9 @@ function LunaUI:CreateWindow(options)
         self._visible = visible
 
         if visible then
-            self._gui.Enabled = true
-            self._main.Visible = true
-            self._mainScale.Scale = self._openScale
-            self._main.GroupTransparency = 1
-            animate(self._mainScale, self._openDuration, {Scale = 1}, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
-            animate(self._main, self._openDuration * 0.85, {GroupTransparency = 0}, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
-            if self._asciiConfig.enabled then
-                self._asciiHolder.Visible = true
-                self._asciiAlpha.Value = 0
-                animate(self._asciiAlpha, self._openDuration + 0.08, {Value = 1}, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
-            end
+            playOpen(self)
         else
-            animate(self._mainScale, self._closeDuration, {Scale = self._openScale}, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
-            animate(self._main, self._closeDuration, {GroupTransparency = 1}, Enum.EasingStyle.Sine, Enum.EasingDirection.In)
-            if self._asciiConfig.enabled then
-                animate(self._asciiAlpha, self._closeDuration * 0.9, {Value = 0}, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
-            end
-            task.delay(self._closeDuration + 0.04, function()
-                if not self._visible and not self._destroyed then
-                    self._gui.Enabled = false
-                    self._asciiHolder.Visible = false
-                end
-            end)
+            playHide(self, false)
         end
     end
 
@@ -1140,17 +1206,28 @@ function LunaUI:CreateWindow(options)
         self:SetVisible(not self._visible)
     end
 
-    -- Close button: shrink and fade everything out before destroying the GUI.
+    -- Close button: slide down, shrink, and fade out before destroying the GUI.
     function window:Close()
         if self._destroyed or self._closing then return end
         self._closing = true
         self._visible = false
-        animate(self._mainScale, self._closeDuration, {Scale = self._openScale * 0.88}, Enum.EasingStyle.Back, Enum.EasingDirection.In)
-        animate(self._main, self._closeDuration, {GroupTransparency = 1}, Enum.EasingStyle.Sine, Enum.EasingDirection.In)
+
+        local targetPosition = self._restPosition or self._main.Position
+        animate(self._mainScale, self._closeDuration, {
+            Scale = self._openScale * 0.78,
+        }, Enum.EasingStyle.Back, Enum.EasingDirection.In)
+        animate(self._main, self._closeDuration, {
+            GroupTransparency = 1,
+            Position = offsetPosition(targetPosition, self._closeOffset + 12),
+        }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+
         if self._asciiConfig.enabled then
-            animate(self._asciiAlpha, self._closeDuration * 0.9, {Value = 0}, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+            animate(self._asciiAlpha, self._closeDuration, {
+                Value = 0,
+            }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
         end
-        task.delay(self._closeDuration + 0.04, function()
+
+        task.delay(self._closeDuration + 0.06, function()
             destroyNow(self)
         end)
     end
@@ -1184,12 +1261,14 @@ function LunaUI:CreateWindow(options)
         if not dragging then return end
         if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
             local delta = input.Position - dragStart
-            main.Position = UDim2.new(
+            local newPosition = UDim2.new(
                 startPosition.X.Scale,
                 startPosition.X.Offset + delta.X,
                 startPosition.Y.Scale,
                 startPosition.Y.Offset + delta.Y
             )
+            main.Position = newPosition
+            window._restPosition = newPosition
         end
     end))
     track(UserInputService.InputBegan:Connect(function(input, gameProcessed)
@@ -1204,18 +1283,10 @@ function LunaUI:CreateWindow(options)
         updateIndicator(true)
     end))
 
-    -- First launch: pop in from a smaller scale while the symbol field fades up.
+    -- First launch uses the same slide/pop/fade as later reopenings.
     task.defer(function()
         if window._destroyed or window._closing then return end
-        mainScale.Scale = openScale
-        main.GroupTransparency = 1
-        animate(mainScale, openDuration, {Scale = 1}, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
-        animate(main, openDuration * 0.85, {GroupTransparency = 0}, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
-        if asciiConfig.enabled then
-            asciiAlpha.Value = 0
-            asciiHolder.Visible = true
-            animate(asciiAlpha, openDuration + 0.08, {Value = 1}, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
-        end
+        playOpen(window)
     end)
 
     return window
