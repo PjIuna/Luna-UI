@@ -1300,6 +1300,237 @@ function LunaUI:CreateWindow(options)
             }
         end
 
+        function tab:CreateDropdown(controlOptions)
+            controlOptions = type(controlOptions) == "table" and controlOptions or {}
+            local values = type(controlOptions.Values) == "table" and controlOptions.Values or {}
+            local configKey = self._window:_ConfigKey(self._name, "Dropdown", controlOptions)
+            local hasSavedValue = self._window:_HasSavedValue(configKey)
+            local multi = controlOptions.Multi == true or controlOptions.MultiSelect == true
+            local defaultValue = controlOptions.Default
+            local selected = {}
+
+            local function findValue(candidate)
+                for _, option in ipairs(values) do
+                    if option == candidate or tostring(option) == tostring(candidate) then
+                        return option
+                    end
+                end
+                if type(candidate) == "number" and values[candidate] ~= nil then
+                    return values[candidate]
+                end
+                return nil
+            end
+
+            local savedValue = self._window:_GetSavedValue(configKey, defaultValue)
+            local initial = hasSavedValue and savedValue or defaultValue
+            if multi then
+                if type(initial) == "table" then
+                    for _, item in ipairs(initial) do
+                        local found = findValue(item)
+                        if found ~= nil then selected[found] = true end
+                    end
+                elseif initial ~= nil then
+                    local found = findValue(initial)
+                    if found ~= nil then selected[found] = true end
+                end
+            else
+                local found = findValue(initial)
+                if found == nil and type(initial) == "number" then found = values[initial] end
+                if found == nil then found = values[1] end
+                if found ~= nil then selected[found] = true end
+            end
+
+            local row = make("Frame", {
+                Name = "DropdownRow",
+                Parent = self._items,
+                Size = UDim2.new(1, -4, 0, 48),
+                BackgroundColor3 = COLORS.panel,
+                BorderSizePixel = 0,
+                ClipsDescendants = true,
+            })
+            row:SetAttribute("IsLunaRow", true)
+            round(row, 7)
+            outline(row, 0.9)
+
+            label(row, controlOptions.Name or "Dropdown", {
+                Position = UDim2.new(0, 10, 0, 4),
+                Size = UDim2.new(1, -20, 0, 16),
+                TextXAlignment = Enum.TextXAlignment.Left,
+                TextScaled = false,
+                TextSize = 12,
+                TextColor3 = COLORS.icon,
+            })
+
+            local selector = make("TextButton", {
+                Name = "SelectedValue",
+                Parent = row,
+                Position = UDim2.new(0, 8, 0, 22),
+                Size = UDim2.new(1, -16, 0, 22),
+                BackgroundColor3 = COLORS.button,
+                BorderSizePixel = 0,
+                AutoButtonColor = false,
+                FontFace = FONT,
+                TextSize = 12,
+                TextColor3 = COLORS.white,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Text = "",
+            })
+            round(selector, 5)
+            make("UIPadding", {
+                Parent = selector,
+                PaddingLeft = UDim.new(0, 8),
+                PaddingRight = UDim.new(0, 8),
+            })
+
+            local optionList = make("ScrollingFrame", {
+                Name = "Options",
+                Parent = row,
+                Position = UDim2.new(0, 8, 0, 48),
+                Size = UDim2.new(1, -16, 0, 0),
+                BackgroundTransparency = 1,
+                BorderSizePixel = 0,
+                ScrollBarThickness = 3,
+                ScrollBarImageColor3 = COLORS.dim,
+                CanvasSize = UDim2.new(),
+                AutomaticCanvasSize = Enum.AutomaticSize.Y,
+                Visible = false,
+            })
+            make("UIListLayout", {
+                Parent = optionList,
+                Padding = UDim.new(0, 3),
+                SortOrder = Enum.SortOrder.LayoutOrder,
+            })
+
+            local expanded = false
+            local function getValue()
+                if multi then
+                    local result = {}
+                    for _, option in ipairs(values) do
+                        if selected[option] then table.insert(result, option) end
+                    end
+                    return result
+                end
+                for _, option in ipairs(values) do
+                    if selected[option] then return option end
+                end
+                return nil
+            end
+
+            local function refreshSelector()
+                local display = {}
+                for _, option in ipairs(values) do
+                    if selected[option] then table.insert(display, tostring(option)) end
+                end
+                selector.Text = (#display > 0 and table.concat(display, ", ") or "Select...")
+                    .. (expanded and "   ▲" or "   ▼")
+            end
+
+            local function resizeList()
+                local visibleCount = math.min(#values, math.max(1, tonumber(controlOptions.MaxVisible) or 4))
+                local listHeight = visibleCount * 25
+                optionList.Size = UDim2.new(1, -16, 0, expanded and listHeight or 0)
+                optionList.Visible = expanded
+                row.Size = UDim2.new(1, -4, 0, expanded and (48 + listHeight + 5) or 48)
+                refreshEmpty()
+            end
+
+            local function fireCallback()
+                if type(controlOptions.Callback) == "function" then
+                    local value = getValue()
+                    local ok, err = pcall(controlOptions.Callback, value)
+                    if not ok then warn("[Luna UI] Dropdown callback:", err) end
+                end
+                self._window:_SetSavedValue(configKey, getValue(), false)
+                refreshSelector()
+            end
+
+            for index, option in ipairs(values) do
+                local optionButton = make("TextButton", {
+                    Name = "Option_" .. tostring(index),
+                    Parent = optionList,
+                    Size = UDim2.new(1, -2, 0, 22),
+                    BackgroundColor3 = COLORS.panel,
+                    BorderSizePixel = 0,
+                    AutoButtonColor = false,
+                    FontFace = FONT,
+                    TextSize = 12,
+                    TextColor3 = COLORS.white,
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    Text = tostring(option),
+                    LayoutOrder = index,
+                })
+                round(optionButton, 5)
+                make("UIPadding", {
+                    Parent = optionButton,
+                    PaddingLeft = UDim.new(0, 8),
+                    PaddingRight = UDim.new(0, 8),
+                })
+                optionButton.MouseEnter:Connect(function()
+                    animate(optionButton, 0.12, {BackgroundColor3 = COLORS.panelHi})
+                end)
+                optionButton.MouseLeave:Connect(function()
+                    animate(optionButton, 0.12, {BackgroundColor3 = selected[option] and COLORS.active or COLORS.panel})
+                end)
+                optionButton.Activated:Connect(function()
+                    if multi then
+                        selected[option] = not selected[option] or nil
+                    else
+                        table.clear(selected)
+                        selected[option] = true
+                        expanded = false
+                        resizeList()
+                    end
+                    optionButton.BackgroundColor3 = selected[option] and COLORS.active or COLORS.panel
+                    fireCallback()
+                    resizeList()
+                end)
+                optionButton.BackgroundColor3 = selected[option] and COLORS.active or COLORS.panel
+            end
+
+            selector.Activated:Connect(function()
+                expanded = not expanded
+                resizeList()
+                refreshSelector()
+            end)
+
+            function row:GetValue()
+                return getValue()
+            end
+            function row:SetValue(newValue)
+                table.clear(selected)
+                if multi and type(newValue) == "table" then
+                    for _, item in ipairs(newValue) do
+                        local found = findValue(item)
+                        if found ~= nil then selected[found] = true end
+                    end
+                else
+                    local found = findValue(newValue)
+                    if found ~= nil then selected[found] = true end
+                end
+                for _, child in ipairs(optionList:GetChildren()) do
+                    if child:IsA("TextButton") then
+                        local option = values[tonumber(child.Name:match("(%d+)$"))]
+                        child.BackgroundColor3 = selected[option] and COLORS.active or COLORS.panel
+                    end
+                end
+                refreshSelector()
+                self._window:_SetSavedValue(configKey, getValue(), false)
+                if type(controlOptions.Callback) == "function" then
+                    local ok, err = pcall(controlOptions.Callback, getValue())
+                    if not ok then warn("[Luna UI] Dropdown callback:", err) end
+                end
+            end
+
+            refreshSelector()
+            resizeList()
+            if hasSavedValue and type(controlOptions.Callback) == "function" then
+                local ok, err = pcall(controlOptions.Callback, getValue())
+                if not ok then warn("[Luna UI] Dropdown restore callback:", err) end
+            end
+            refreshEmpty()
+            return row
+        end
+
         function tab:CreateInput(controlOptions)
             controlOptions = controlOptions or {}
             local configKey = self._window:_ConfigKey(self._name, "Input", controlOptions)
