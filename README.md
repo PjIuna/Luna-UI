@@ -71,6 +71,23 @@ Faker:CreateSlider({
         print("[Luna UI] Slider:", value)
     end,
 })
+Faker:CreateDropdown({
+    Name = "Test Dropdown",
+    Values = {"First", "Second", "Third"},
+    Default = "First",
+    Callback = function(value)
+        print("[Luna UI] Dropdown:", value)
+    end,
+})
+Faker:CreateDropdown({
+    Name = "Multi-select Example",
+    Values = {"Red", "Green", "Blue"},
+    Default = {"Red"},
+    Multi = true,
+    Callback = function(values)
+        print("[Luna UI] Selected options:", table.concat(values, ", "))
+    end,
+})
 Faker:CreateInput({
     Name = "Test Input",
     Placeholder = "Type something, then press Enter",
@@ -120,6 +137,7 @@ Config saving is enabled by default. In executor environments that support `read
 
 - Toggle values
 - Slider values
+- Dropdown selections (single and multi-select)
 - Text input values
 - Last selected tab
 - Window position
@@ -181,9 +199,10 @@ The image IDs used by these presets are also exposed as `LunaUI.Icons`, so you c
 - `Tab:CreateButton({Name, Description, Subtext, Icon, Callback})`
 - `Tab:CreateToggle({Name, Default, Callback})`
 - `Tab:CreateSlider({Name, Min, Max, Default, Callback})`
+- `Tab:CreateDropdown({Name, Values, Default, Multi, MaxVisible, Callback})`
 - `Tab:CreateInput({Name, Placeholder, Default, Callback})`
 
-Toggle callbacks receive a boolean. Slider callbacks receive a number. Input callbacks receive the text and an `enterPressed` boolean when focus is lost. Callback errors are sent to `warn`.
+Toggle callbacks receive a boolean. Slider callbacks receive a number. A single-select dropdown callback receives the selected value; with `Multi = true`, it receives an array of selected values. Dropdowns return objects with `GetValue()` and `SetValue(value)`. Input callbacks receive the text and an `enterPressed` boolean when focus is lost. Callback errors are sent to `warn`.
 
 Toggle and slider controls return objects with `GetValue()`, `SetValue(value)`, and an `Instance` reference.
 
