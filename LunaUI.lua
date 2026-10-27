@@ -674,13 +674,21 @@ function LunaUI:CreateWindow(options)
         if not self._configEnabled then return end
         local valueType = typeof(value)
         if valueType == "table" then
-            -- Only allow the plain numeric table used for window coordinates.
-            if key ~= "__windowPosition"
-                or type(value.XScale) ~= "number"
-                or type(value.XOffset) ~= "number"
-                or type(value.YScale) ~= "number"
-                or type(value.YOffset) ~= "number" then
-                return
+            if key == "__windowPosition" then
+                if type(value.XScale) ~= "number"
+                    or type(value.XOffset) ~= "number"
+                    or type(value.YScale) ~= "number"
+                    or type(value.YOffset) ~= "number" then
+                    return
+                end
+            else
+                -- Multi-select dropdowns save a flat array of primitive values.
+                for index, item in pairs(value) do
+                    if type(index) ~= "number" or index < 1 or index % 1 ~= 0
+                        or (type(item) ~= "string" and type(item) ~= "number" and type(item) ~= "boolean") then
+                        return
+                    end
+                end
             end
         elseif valueType ~= "boolean" and valueType ~= "number" and valueType ~= "string" then
             return
